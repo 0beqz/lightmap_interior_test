@@ -43,9 +43,14 @@
 
 		import Toastify from "./node_modules/toastify-js/src/toastify-es.js";
 
+		import { KTX2Loader } from './js/loaders/KTX2Loader.js';
+		import { MeshoptDecoder } from './js/libs/meshopt_decoder.module.js';
+
 		import { worldposReplace, envmapPhysicalParsReplace } from "./js/EnvMapShaders.js";
 
 		const scene = new THREE.Scene();
+		scene.updateMatrixWorld = () => {};
+
 		const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.001, 200);
 		camera.rotation.order = "YXZ";
 
@@ -108,7 +113,14 @@
 
 		const ambientLight = new THREE.AmbientLight(0xffffff, 1);
 
+		const ktx2Loader = new KTX2Loader()
+			.setTranscoderPath("js/libs/basis/")
+			.detectSupport(renderer);
+
 		const gltfLoader = new GLTFLoader();
+		gltfLoader.setKTX2Loader(ktx2Loader);
+		gltfLoader.setMeshoptDecoder(MeshoptDecoder);
+
 		const textureLoader = new THREE.TextureLoader();
 		const smaaImageLoader = new POSTPROCESSING.SMAAImageLoader();
 
@@ -149,9 +161,10 @@
 			));
 
 			// total size in bytes
-			const total = 33_917_504;
+			const total = 2_240_376;
 
-			gltfLoader.load("glb/room_demo.glb", handeModel, xhr => {
+			// compressed using "gltfpack -i room_demo.glb -o demo.glb -noq -kn -km -tq 10 -ke -tc -mm -tp -vc 1 -vn 1"
+			gltfLoader.load("glb/demo.glb", handeModel, xhr => {
 				loadingNode.textContent = "Loading scene... " + Math.round(xhr.loaded / total * 100) + "%";
 			});
 		});
@@ -337,11 +350,6 @@
 
 		function handeModel(gltf) {
 			const object = gltf.scene;
-			const lightMapObject = object.getObjectByName("lightmap");
-
-			worldOctree.fromGraphNode(object);
-
-			const { map } = lightMapObject.material;
 
 			const materials = new Set();
 			const reflectionMaterials = new Set();
@@ -352,7 +360,7 @@
 				if (c.isMesh) {
 					if (c.material.emissive.getHex() !== 0) return;
 
-					let materialName = c.material.name;
+					const materialName = c.material.name;
 
 					c.material = new THREE.MeshStandardMaterial({
 						map: c.material.map,
@@ -360,13 +368,32 @@
 						metalnessMap: c.material.metalnessMap,
 						roughnessMap: c.material.roughnessMap,
 						normalScale,
-						lightMap: map,
 						lightMapIntensity: 3.75
 					});
 
-					if (materialName === "Floor.001") {
-						textureLoader.load(
-							"hdr/ground_reflections.png",
+					// collisions
+					if(materialName.startsWith("Floor") || materialName.startsWith("Wall")){
+						worldOctree.fromGraphNode(c);
+					}
+
+					// the repeat of the textures is set to 1 after compressing the GLB with gltfpack so the repeat will be set here according
+					// to the material name
+					const repeatValue = {
+						"Floor.009": 8,
+						"Wall.009": 2,
+						"Grey.009": 4
+					}[materialName] || 1;
+
+					let repeat = new THREE.Vector2(repeatValue, repeatValue);
+					
+					if(c.material.map) c.material.map.repeat = repeat;
+					if(c.material.normalMap) c.material.normalMap.repeat = repeat;
+					if(c.material.metalnessMap) c.material.metalnessMap.repeat = repeat;
+					if(c.material.roughnessMap) c.material.roughnessMap.repeat = repeat;
+
+					if (materialName === "Floor.009") {
+						ktx2Loader.load(
+							"hdr/ground_reflections.ktx2",
 							tex => {
 								tex.minFilter = THREE.NearestFilter;
 								tex.encoding = THREE.sRGBEncoding;
@@ -375,7 +402,7 @@
 
 								c.material.envMap = cubeRenderTarget.texture;
 								c.material.envMapIntensity = 4.25;
-								
+
 								c.material.roughness = 0.7;
 								c.material.metalness = 1;
 
@@ -389,7 +416,7 @@
 						reflectionMaterials.add(c.material);
 					}
 
-					let v = 0.3;
+					const v = 0.3;
 
 					c.material.color.setRGB(v, v, v);
 
@@ -401,6 +428,8 @@
 			let hasLightMap = true;
 			let hasReflections = true;
 			let hasDiffuse = true;
+
+			let map;
 
 			document.addEventListener("mousedown", ev => {
 				if (document.pointerLockElement !== document.body) return;
@@ -463,18 +492,29 @@
 				}
 			});
 
-			lightMapObject.geometry.dispose();
-			lightMapObject.material.dispose();
-			lightMapObject.parent.remove(lightMapObject);
+			// needs to have its Y unit flipped
+			ktx2Loader.load("glb/lightmap/lightmap.ktx2", tex => {
+				tex.minFilter = THREE.NearestFilter;
+				tex.encoding = THREE.sRGBEncoding;
+
+				tex.needsUpdate = true;
+				
+				for(let material of materials){
+					material.lightMap = tex;
+					material.needsUpdate = true;
+				}
+
+				map = tex;
+
+				// precompile
+				composer.render(0);
+
+				startRendering();
+			});
 
 			scene.add(object);
 
 			loadAudio();
-
-			// precompile
-			composer.render(0);
-
-			startRendering();
 		}
 
 		function startRendering() {
@@ -486,8 +526,8 @@
 		}
 
 		function spawn() {
-			playerCollider.start.set(0, -6, 0);
-			playerCollider.end.set(0, -6 + 4.5, 0);
+			playerCollider.start.set(0, -7.5, 0);
+			playerCollider.end.set(0, -7.5 + 4.5, 0);
 			playerVelocity.set(0, 0, 0);
 		}
 
@@ -502,9 +542,11 @@
 
 			updatePlayer(delta);
 
+			camera.updateMatrixWorld();
+
 			composer.render(delta);
 
-			if (playerCollider.start.y < -35) {
+			if (playerCollider.start.y < -10) {
 				spawn();
 			}
 		}

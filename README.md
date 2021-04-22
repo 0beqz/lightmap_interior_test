@@ -1,11 +1,11 @@
 # three.js lightmap interior test
 
-A simple three.js demo scene where a lightmap that was generated in Blender using the addon The Lightmapper is tested. Ground reflections were made possible through box-projecting an env-map. The env-map was also generated in Blender.
+A simple three.js demo scene where a lightmap that was generated in Blender using the addon The Lightmapper is tested. Ground reflections were made possible through box-projecting an env-map. The env-map was also generated in Blender. The scene and the textures were compressed using gltfpack and basisu. All textures are in KTX2 format.
 <br>
 <br>
 **View the [Online Demo]()**
 <sub>
-<br>Download size: ~33 MB
+<br>Download size: ~608 kB
 </sub>
 <br>
 <br>
