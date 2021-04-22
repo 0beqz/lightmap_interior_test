@@ -1,0 +1,514 @@
+<html>
+
+<head>
+	<title>Three JS Demo Scene</title>
+	<style>
+		body {
+			margin: 0;
+			overflow: hidden;
+			background: rgb(238, 174, 202);
+			background: radial-gradient(circle, rgba(238, 174, 202, 1) 0%, rgba(148, 187, 233, 1) 100%);
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+		}
+
+		canvas {
+			cursor: grab;
+		}
+
+		#loading {
+			position: fixed;
+			top: 50%;
+			left: 50%;
+			color: white;
+			font-size: 32px;
+			transform: translate(-50%, -50%);
+			text-shadow: 4px 4px 59px rgba(0, 0, 0, 0.75);
+			letter-spacing: 2px;
+		}
+	</style>
+
+	<link href="/node_modules/toastify-js/src/toastify.css" rel="stylesheet">
+</head>
+
+<body>
+	<div id="loading">Loading scene... 0%</div>
+
+	<script type="module">
+		import * as THREE from "./build/three.module.js";
+		import * as POSTPROCESSING from "./build/postprocessing.esm.js";
+		import { GLTFLoader } from "./js/GLTFLoader.js"
+
+		import { Octree } from "./js/math/Octree.js";
+		import { Capsule } from "./js/math/Capsule.js";
+
+		import Toastify from "./node_modules/toastify-js/src/toastify-es.js";
+
+		import { worldposReplace, envmapPhysicalParsReplace } from "./js/EnvMapShaders.js";
+
+		const scene = new THREE.Scene();
+		const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.001, 200);
+		camera.rotation.order = "YXZ";
+
+		const listener = new THREE.AudioListener();
+		camera.add(listener);
+
+		function loadAudio() {
+			// load a sound and set it as the PositionalAudio object's buffer
+			const audioLoader = new THREE.AudioLoader();
+
+			audioLoader.load("audio/hum.mp3", buffer => {
+				const sound = new THREE.PositionalAudio(listener);
+				sound.position.set(0, 13.0177, 0);
+				scene.add(sound);
+
+				sound.setVolume(0.6);
+				sound.setBuffer(buffer);
+				sound.setLoop(true);
+				sound.setRefDistance(17);
+				sound.play();
+			});
+
+			audioLoader.load("audio/synthony1.mp3", buffer => {
+				const sound = new THREE.PositionalAudio(listener);
+				sound.position.set(0, 4, -76.319);
+				scene.add(sound);
+
+				sound.setBuffer(buffer);
+				sound.setLoop(true);
+				sound.setRefDistance(14);
+				sound.play();
+			});
+
+			audioLoader.load("audio/synthony2.mp3", buffer => {
+				const sound = new THREE.PositionalAudio(listener);
+				sound.position.set(0, 4, 76.319);
+				scene.add(sound);
+
+				sound.setBuffer(buffer);
+				sound.setLoop(true);
+				sound.setVolume(0.8);
+				sound.setRefDistance(14);
+				sound.play();
+			});
+		}
+
+		const renderer = new THREE.WebGLRenderer({ logarithmicDepthBuffer: true });
+
+		renderer.setPixelRatio(window.devicePixelRatio);
+		renderer.setSize(window.innerWidth, window.innerHeight);
+		renderer.setClearColor(0x96d7fa);
+		renderer.outputEncoding = THREE.sRGBEncoding;
+
+		window.addEventListener("resize", () => {
+			camera.aspect = window.innerWidth / window.innerHeight;
+			camera.updateProjectionMatrix();
+
+			renderer.setSize(window.innerWidth, window.innerHeight);
+		});
+
+		const ambientLight = new THREE.AmbientLight(0xffffff, 1);
+
+		const gltfLoader = new GLTFLoader();
+		const textureLoader = new THREE.TextureLoader();
+		const smaaImageLoader = new POSTPROCESSING.SMAAImageLoader();
+
+		const loadingNode = document.getElementById("loading");
+
+		let composer;
+
+		smaaImageLoader.load(([search, area]) => {
+			let smaaEffect = new POSTPROCESSING.SMAAEffect(
+				search,
+				area,
+				POSTPROCESSING.SMAAPreset.HIGH,
+				POSTPROCESSING.EdgeDetectionMode.COLOR
+			);
+
+			smaaEffect.edgeDetectionMaterial.setEdgeDetectionThreshold(0.05);
+
+			let bloomOptions = {
+				blendFunction: POSTPROCESSING.BlendFunction.SCREEN,
+				kernelSize: POSTPROCESSING.KernelSize.VERY_HUGE,
+				luminanceThreshold: 0.6,
+				intensity: 0.6,
+				width: 520,
+				height: 520
+			};
+
+			composer = new POSTPROCESSING.EffectComposer(renderer, {
+				frameBufferType: THREE.HalfFloatType
+			});
+			composer.addPass(new POSTPROCESSING.RenderPass(scene, camera));
+
+			composer.addPass(new POSTPROCESSING.EffectPass(camera,
+				smaaEffect,
+				new POSTPROCESSING.BloomEffect(bloomOptions),
+				new POSTPROCESSING.VignetteEffect({ offset: 0.35 }),
+				new POSTPROCESSING.GammaCorrectionEffect({ gamma: 1.275 }),
+				new POSTPROCESSING.HueSaturationEffect({ saturation: 0.1 })
+			));
+
+			// total size in bytes
+			const total = 33_917_504;
+
+			gltfLoader.load("glb/room_demo.glb", handeModel, xhr => {
+				loadingNode.textContent = "Loading scene... " + Math.round(xhr.loaded / total * 100) + "%";
+			});
+		});
+
+		const worldOctree = new Octree();
+
+		const playerCollider = new Capsule(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 3, 0), 3 / 2);
+
+		const playerVelocity = new THREE.Vector3();
+		const playerDirection = new THREE.Vector3();
+
+		let playerOnFloor = false;
+
+		const keyStates = {};
+
+		document.addEventListener('keydown', (event) => {
+
+			keyStates[event.code] = true;
+
+		});
+
+		document.addEventListener('keyup', (event) => {
+
+			keyStates[event.code] = false;
+
+		});
+
+		document.addEventListener('mousedown', () => {
+
+			document.body.requestPointerLock();
+
+		});
+
+		document.body.addEventListener('mousemove', (event) => {
+
+			if (document.pointerLockElement === document.body) {
+
+				camera.rotation.y -= event.movementX / 500 % (2 * Math.PI);
+				camera.rotation.x -= event.movementY / 500;
+
+				camera.rotation.x = THREE.Math.clamp(camera.rotation.x, -Math.PI / 2, Math.PI / 2);
+
+			}
+
+		});
+
+		function playerCollitions() {
+
+			const result = worldOctree.capsuleIntersect(playerCollider);
+
+			playerOnFloor = false;
+
+			if (result) {
+
+				playerOnFloor = result.normal.y > 0;
+
+				if (!playerOnFloor) {
+
+					playerVelocity.addScaledVector(result.normal, - result.normal.dot(playerVelocity));
+
+				}
+
+				playerCollider.translate(result.normal.multiplyScalar(result.depth));
+
+			}
+
+		}
+
+		const GRAVITY = 90;
+
+		function updatePlayer(deltaTime) {
+
+			if (playerOnFloor) {
+
+				const damping = Math.exp(- 30 * deltaTime) - 1;
+				playerVelocity.addScaledVector(playerVelocity, damping);
+
+			} else {
+
+				playerVelocity.y -= GRAVITY * deltaTime;
+
+			}
+
+			const deltaPosition = playerVelocity.clone().multiplyScalar(deltaTime);
+			playerCollider.translate(deltaPosition);
+
+			playerCollitions();
+
+			camera.position.copy(playerCollider.end);
+
+		}
+
+		function getForwardVector() {
+
+			camera.getWorldDirection(playerDirection);
+			playerDirection.y = 0;
+			playerDirection.normalize();
+
+			return playerDirection;
+
+		}
+
+		function getSideVector() {
+
+			camera.getWorldDirection(playerDirection);
+			playerDirection.y = 0;
+			playerDirection.normalize();
+			playerDirection.cross(camera.up);
+
+			return playerDirection;
+
+		}
+
+		function controls(deltaTime) {
+			const sprinting = keyStates["ShiftLeft"] === true || keyStates["ShiftRight"] === true;
+
+			const speed = sprinting ? 1000 : 600;
+
+			if (playerOnFloor) {
+
+				if (keyStates['KeyW']) {
+
+					playerVelocity.add(getForwardVector().multiplyScalar(speed * deltaTime));
+
+				}
+
+				if (keyStates['KeyS']) {
+
+					playerVelocity.add(getForwardVector().multiplyScalar(- speed * deltaTime));
+
+				}
+
+				if (keyStates['KeyA']) {
+
+					playerVelocity.add(getSideVector().multiplyScalar(- speed * deltaTime));
+
+				}
+
+				if (keyStates['KeyD']) {
+
+					playerVelocity.add(getSideVector().multiplyScalar(speed * deltaTime));
+
+				}
+
+				if (keyStates['Space']) {
+
+					playerVelocity.y = 45;
+
+				}
+
+			}
+
+		}
+
+		// credits for the shader code go to codercat (https://codercat.tk)
+		function patchShaderCode(material, cubeMapPosition = null, cubeMapSize = null) {
+			material.onBeforeCompile = shader => {
+				if (cubeMapPosition !== null && cubeMapSize !== null) {
+					//these parameters are for the cubeCamera texture
+					shader.uniforms.cubeMapPos = {
+						value: cubeMapPosition
+					};
+
+					shader.uniforms.cubeMapSize = {
+						value: cubeMapSize
+					};
+
+					//replace shader chunks with box projection chunks
+					shader.vertexShader = 'varying vec3 vWorldPosition;\n' + shader.vertexShader;
+
+					shader.vertexShader = shader.vertexShader.replace(
+						'#include <worldpos_vertex>',
+						worldposReplace
+					);
+
+					shader.fragmentShader = shader.fragmentShader.replace(
+						'#include <envmap_physical_pars_fragment>',
+						envmapPhysicalParsReplace + "\n"
+					);
+				}
+			};
+		}
+
+		function handeModel(gltf) {
+			const object = gltf.scene;
+			const lightMapObject = object.getObjectByName("lightmap");
+
+			worldOctree.fromGraphNode(object);
+
+			const { map } = lightMapObject.material;
+
+			const materials = new Set();
+			const reflectionMaterials = new Set();
+
+			const normalScale = new THREE.Vector2(2, 2);
+
+			object.traverse(c => {
+				if (c.isMesh) {
+					if (c.material.emissive.getHex() !== 0) return;
+
+					let materialName = c.material.name;
+
+					c.material = new THREE.MeshStandardMaterial({
+						map: c.material.map,
+						normalMap: c.material.normalMap,
+						metalnessMap: c.material.metalnessMap,
+						roughnessMap: c.material.roughnessMap,
+						normalScale,
+						lightMap: map,
+						lightMapIntensity: 3.75
+					});
+
+					if (materialName === "Floor.001") {
+						textureLoader.load(
+							"hdr/ground_reflections.png",
+							tex => {
+								tex.minFilter = THREE.NearestFilter;
+								tex.encoding = THREE.sRGBEncoding;
+
+								let cubeRenderTarget = new THREE.WebGLCubeRenderTarget(2048).fromEquirectangularTexture(renderer, tex);
+
+								c.material.envMap = cubeRenderTarget.texture;
+								c.material.envMapIntensity = 4.25;
+								
+								c.material.roughness = 0.7;
+								c.material.metalness = 1;
+
+								let tolerance = 1.5;
+
+								patchShaderCode(c.material, new THREE.Vector3(0, 3, 0), new THREE.Vector3(60 + tolerance, 24, 150 + tolerance));
+
+								c.material.needsUpdate = true;
+							});
+
+						reflectionMaterials.add(c.material);
+					}
+
+					let v = 0.3;
+
+					c.material.color.setRGB(v, v, v);
+
+					materials.add(c.material);
+				}
+			});
+
+			// allow the user to toggle the light map, reflections and the diffuse map
+			let hasLightMap = true;
+			let hasReflections = true;
+			let hasDiffuse = true;
+
+			document.addEventListener("mousedown", ev => {
+				if (document.pointerLockElement !== document.body) return;
+
+				if (ev.button === 2) {
+					hasLightMap = !hasLightMap;
+
+					for (let material of materials) {
+						material.lightMap = hasLightMap ? map : null;
+						material.needsUpdate = true;
+					}
+
+					Toastify({
+						text: (hasLightMap ? "Enabled" : "Disabled") + " lightmap",
+						duration: 1000,
+						newWindow: true,
+						gravity: "top",
+						position: "right"
+					}).showToast();
+
+					if (hasLightMap) {
+						scene.remove(ambientLight);
+					} else {
+						scene.add(ambientLight);
+					}
+				} else if (ev.button === 1) {
+					hasReflections = !hasReflections;
+
+					for (let reflectionMaterial of reflectionMaterials) {
+						if (!reflectionMaterial.userData.envMapIntensity) reflectionMaterial.userData.envMapIntensity = reflectionMaterial.envMapIntensity;
+
+						reflectionMaterial.envMapIntensity = hasReflections ? reflectionMaterial.userData.envMapIntensity : 0;
+					}
+
+					Toastify({
+						text: (hasReflections ? "Enabled" : "Disabled") + " reflections",
+						duration: 1000,
+						newWindow: true,
+						gravity: "top",
+						position: "right"
+					}).showToast();
+				} else if (ev.button === 0) {
+					hasDiffuse = !hasDiffuse;
+
+					for (let material of materials) {
+						if (!material.userData.map) material.userData.map = material.map;
+
+						material.map = hasDiffuse ? material.userData.map : null;
+
+						material.needsUpdate = true;
+					}
+
+					Toastify({
+						text: (hasDiffuse ? "Enabled" : "Disabled") + " diffuse textures",
+						duration: 1000,
+						newWindow: true,
+						gravity: "top",
+						position: "right"
+					}).showToast();
+				}
+			});
+
+			lightMapObject.geometry.dispose();
+			lightMapObject.material.dispose();
+			lightMapObject.parent.remove(lightMapObject);
+
+			scene.add(object);
+
+			loadAudio();
+
+			// precompile
+			composer.render(0);
+
+			startRendering();
+		}
+
+		function startRendering() {
+			loadingNode.parentNode.removeChild(loadingNode);
+			document.body.appendChild(renderer.domElement);
+
+			spawn();
+			render();
+		}
+
+		function spawn() {
+			playerCollider.start.set(0, -6, 0);
+			playerCollider.end.set(0, -6 + 4.5, 0);
+			playerVelocity.set(0, 0, 0);
+		}
+
+		const clock = new THREE.Clock();
+
+		function render() {
+			requestAnimationFrame(render);
+
+			const delta = clock.getDelta();
+
+			controls(delta);
+
+			updatePlayer(delta);
+
+			composer.render(delta);
+
+			if (playerCollider.start.y < -35) {
+				spawn();
+			}
+		}
+	</script>
+</body>
+
+</html>
