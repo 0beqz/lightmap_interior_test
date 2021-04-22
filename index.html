@@ -192,9 +192,16 @@
 
 		});
 
+		let hasLoadedAudio = false;
+
 		document.addEventListener('mousedown', () => {
 
 			document.body.requestPointerLock();
+
+			if(!hasLoadedAudio){
+				loadAudio();
+				hasLoadedAudio = true;
+			}
 
 		});
 
@@ -513,8 +520,6 @@
 			});
 
 			scene.add(object);
-
-			loadAudio();
 		}
 
 		function startRendering() {
