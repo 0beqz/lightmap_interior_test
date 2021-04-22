@@ -5,13 +5,16 @@ A simple three.js demo scene where a lightmap that was generated in Blender usin
 <br>
 **View the [Online Demo]()**
 <sub>
-<br>Download size: ~608 kB
+<br>Download size: ~608 kB (compressed)
 </sub>
 <br>
 <br>
 
-## Screenshot
+## Screenshots
 <img src="img/screenshot.png" />
+<br>
+<br>
+<img src="img/screenshot2.png" />
 
 ## Credits
 #### Template:
