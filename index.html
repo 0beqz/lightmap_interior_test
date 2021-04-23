@@ -12,6 +12,7 @@
 		}
 
 		canvas {
+			display: block;
 			cursor: grab;
 		}
 
@@ -25,14 +26,21 @@
 			text-shadow: 4px 4px 59px rgba(0, 0, 0, 0.75);
 			letter-spacing: 2px;
 		}
+
+		#left {
+			position: fixed;
+			width: 50vw;
+			height: 100vh;
+		}
 	</style>
 
 	<link href="./css/toastify.css" rel="stylesheet">
 </head>
 
 <body>
+	<div id="left"></div>
 	<div id="loading">Loading scene... 0%</div>
-
+	<script src="./js/nipplejs.js"></script>
 	<script type="module">
 		import * as THREE from "./build/three.module.js";
 		import * as POSTPROCESSING from "./build/postprocessing.esm.js";
@@ -47,6 +55,11 @@
 		import { MeshoptDecoder } from './js/libs/meshopt_decoder.module.js';
 
 		import { worldposReplace, envmapPhysicalParsReplace } from "./js/EnvMapShaders.js";
+
+		// source: https://stackoverflow.com/a/4819886/7626841
+		const isTouch = (('ontouchstart' in window) ||
+			(navigator.maxTouchPoints > 0) ||
+			(navigator.msMaxTouchPoints > 0));
 
 		const scene = new THREE.Scene();
 
@@ -210,18 +223,29 @@
 
 		});
 
-		document.body.addEventListener('mousemove', (event) => {
+		if (isTouch) {
+			document.body.addEventListener("click", () => {
+				// go fullscreen on mobile
+				document.body.requestFullscreen({ navigationUI: "hide" });
+			});
+		}
+
+		document.body.addEventListener('mousemove', event => {
 
 			if (document.pointerLockElement === document.body) {
 
-				camera.rotation.y -= event.movementX / 500 % (2 * Math.PI);
-				camera.rotation.x -= event.movementY / 500;
-
-				camera.rotation.x = THREE.Math.clamp(camera.rotation.x, -Math.PI / 2, Math.PI / 2);
+				handleMove(event.movementX, event.movementY);
 
 			}
 
 		});
+
+		function handleMove(movementX, movementY) {
+			camera.rotation.y -= movementX / 500 % (2 * Math.PI);
+			camera.rotation.x -= movementY / 500;
+
+			camera.rotation.x = THREE.Math.clamp(camera.rotation.x, -Math.PI / 2, Math.PI / 2);
+		}
 
 		function playerCollitions() {
 
@@ -290,41 +314,100 @@
 
 		}
 
+		let joystickAngle = 0;
+		let joystickForce = 0;
+
+		if (isTouch) {
+			const manager = nipplejs.create({
+				size: 180,
+				zone: document.querySelector("#left"),
+				dataOnly: true
+			});
+
+			manager.on("move", (ev, n) => {
+				joystickAngle = n.angle.radian;
+				joystickForce = THREE.Math.clamp(n.force, 0, 1);
+			});
+
+			manager.on("end", () => {
+				joystickAngle = 0;
+				joystickForce = 0;
+			});
+
+			let lastTouch = null;
+
+			document.addEventListener("touchend", () => {
+				lastTouch = null;
+			});
+
+			document.addEventListener("touchmove", ev => {
+				let touch = null;
+
+				for (let t of event.touches) {
+					if (t.pageX >= window.innerWidth / 2) {
+						touch = t;
+						break;
+					}
+				}
+
+				if (touch === null) {
+					return;
+				}
+
+				if (lastTouch) {
+					let movementX = touch.pageX - lastTouch.pageX;
+					let movementY = touch.pageY - lastTouch.pageY;
+
+					handleMove(movementX * 6, movementY * 6);
+				}
+
+				lastTouch = touch;
+			});
+		}
+
 		function controls(deltaTime) {
 			const sprinting = keyStates["ShiftLeft"] === true || keyStates["ShiftRight"] === true;
 
-			const speed = sprinting ? 1000 : 600;
-
 			if (playerOnFloor) {
 
-				if (keyStates['KeyW']) {
+				if (isTouch) {
+					let speed = 1000 * joystickForce;
 
-					playerVelocity.add(getForwardVector().multiplyScalar(speed * deltaTime));
+					playerVelocity.add(getForwardVector().multiplyScalar(speed * Math.sin(joystickAngle) * deltaTime));
+					playerVelocity.add(getSideVector().multiplyScalar(speed * Math.cos(joystickAngle) * deltaTime));
 
-				}
+				} else {
+					let speed = sprinting ? 1000 : 600;
 
-				if (keyStates['KeyS']) {
+					if (keyStates['KeyW']) {
 
-					playerVelocity.add(getForwardVector().multiplyScalar(- speed * deltaTime));
+						playerVelocity.add(getForwardVector().multiplyScalar(speed * deltaTime));
 
-				}
+					}
 
-				if (keyStates['KeyA']) {
+					if (keyStates['KeyS']) {
 
-					playerVelocity.add(getSideVector().multiplyScalar(- speed * deltaTime));
+						playerVelocity.add(getForwardVector().multiplyScalar(- speed * deltaTime));
 
-				}
+					}
 
-				if (keyStates['KeyD']) {
+					if (keyStates['KeyA']) {
 
-					playerVelocity.add(getSideVector().multiplyScalar(speed * deltaTime));
+						playerVelocity.add(getSideVector().multiplyScalar(- speed * deltaTime));
 
-				}
+					}
 
-				if (keyStates['Space']) {
+					if (keyStates['KeyD']) {
 
-					playerVelocity.y = 45;
+						playerVelocity.add(getSideVector().multiplyScalar(speed * deltaTime));
 
+					}
+
+					if (keyStates['Space']) {
+
+						playerVelocity.y = 45;
+
+					}
 				}
 
 			}
