@@ -9,6 +9,12 @@ A simple three.js demo scene where a lightmap that was generated in Blender usin
 </sub>
 <br>
 <br>
+***[Uncompressed Demo](https://0beqz.github.io/lightmap_interior_test/?uncompressed)***
+<sub>
+<br>Download size: 37 MB
+</sub>
+<br>
+<br>
 
 ## Screenshots
 <img src="img/screenshot.png" />
