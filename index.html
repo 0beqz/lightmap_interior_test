@@ -36,13 +36,13 @@
 	<script type="module">
 		import * as THREE from "./build/three.module.js";
 		import * as POSTPROCESSING from "./build/postprocessing.esm.js";
-		import { GLTFLoader } from "./js/GLTFLoader.js"
 
 		import { Octree } from "./js/math/Octree.js";
 		import { Capsule } from "./js/math/Capsule.js";
 
 		import Toastify from "./js/toastify-es.js";
 
+		import { GLTFLoader } from "./js/GLTFLoader.js"
 		import { KTX2Loader } from './js/loaders/KTX2Loader.js';
 		import { MeshoptDecoder } from './js/libs/meshopt_decoder.module.js';
 
@@ -126,6 +126,16 @@
 
 		const loadingNode = document.getElementById("loading");
 
+		const worldOctree = new Octree();
+		const playerCollider = new Capsule(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 3, 0), 3 / 2);
+
+		const playerVelocity = new THREE.Vector3();
+		const playerDirection = new THREE.Vector3();
+
+		let playerOnFloor = false;
+
+		const keyStates = {};
+
 		let composer;
 
 		smaaImageLoader.load(([search, area]) => {
@@ -167,18 +177,11 @@
 			gltfLoader.load("glb/demo.glb", handeModel, xhr => {
 				loadingNode.textContent = "Loading scene... " + Math.round(xhr.loaded / total * 100) + "%";
 			});
+
+			gltfLoader.load("glb/additional_collider.glb", gltf => {
+				worldOctree.fromGraphNode(gltf.scene);
+			});
 		});
-
-		const worldOctree = new Octree();
-
-		const playerCollider = new Capsule(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 3, 0), 3 / 2);
-
-		const playerVelocity = new THREE.Vector3();
-		const playerDirection = new THREE.Vector3();
-
-		let playerOnFloor = false;
-
-		const keyStates = {};
 
 		document.addEventListener('keydown', (event) => {
 
