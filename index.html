@@ -203,7 +203,7 @@
 
 			document.body.requestPointerLock();
 
-			if(!hasLoadedAudio){
+			if (!hasLoadedAudio) {
 				loadAudio();
 				hasLoadedAudio = true;
 			}
@@ -384,7 +384,7 @@
 					});
 
 					// collisions
-					if(materialName.startsWith("Floor") || materialName.startsWith("Wall")){
+					if (materialName.startsWith("Floor") || materialName.startsWith("Wall")) {
 						worldOctree.fromGraphNode(c);
 					}
 
@@ -393,20 +393,20 @@
 
 					let repeatValue = 1;
 
-					if(materialName.startsWith("Floor")){
+					if (materialName.startsWith("Floor")) {
 						repeatValue = 8;
-					}else if(materialName.startsWith("Wall")){
+					} else if (materialName.startsWith("Wall")) {
 						repeatValue = 2;
-					}else if(materialName.startsWith("Grey")){
+					} else if (materialName.startsWith("Grey")) {
 						repeatValue = 4;
 					}
 
 					let repeat = new THREE.Vector2(repeatValue, repeatValue);
-					
-					if(c.material.map) c.material.map.repeat = repeat;
-					if(c.material.normalMap) c.material.normalMap.repeat = repeat;
-					if(c.material.metalnessMap) c.material.metalnessMap.repeat = repeat;
-					if(c.material.roughnessMap) c.material.roughnessMap.repeat = repeat;
+
+					if (c.material.map) c.material.map.repeat = repeat;
+					if (c.material.normalMap) c.material.normalMap.repeat = repeat;
+					if (c.material.metalnessMap) c.material.metalnessMap.repeat = repeat;
+					if (c.material.roughnessMap) c.material.roughnessMap.repeat = repeat;
 
 					if (materialName.startsWith("Floor")) {
 						ktx2Loader.load(
@@ -459,19 +459,13 @@
 						material.needsUpdate = true;
 					}
 
-					Toastify({
-						text: (hasLightMap ? "Enabled" : "Disabled") + " lightmap",
-						duration: 1000,
-						newWindow: true,
-						gravity: "top",
-						position: "right"
-					}).showToast();
-
 					if (hasLightMap) {
 						scene.remove(ambientLight);
 					} else {
 						scene.add(ambientLight);
 					}
+
+					showToggleNotification("lightmap", hasLightMap);
 				} else if (ev.button === 1) {
 					hasReflections = !hasReflections;
 
@@ -481,13 +475,7 @@
 						reflectionMaterial.envMapIntensity = hasReflections ? reflectionMaterial.userData.envMapIntensity : 0;
 					}
 
-					Toastify({
-						text: (hasReflections ? "Enabled" : "Disabled") + " reflections",
-						duration: 1000,
-						newWindow: true,
-						gravity: "top",
-						position: "right"
-					}).showToast();
+					showToggleNotification("reflections", hasReflections);
 				} else if (ev.button === 0) {
 					hasDiffuse = !hasDiffuse;
 
@@ -499,29 +487,18 @@
 						material.needsUpdate = true;
 					}
 
-					Toastify({
-						text: (hasDiffuse ? "Enabled" : "Disabled") + " diffuse textures",
-						duration: 1000,
-						newWindow: true,
-						gravity: "top",
-						position: "right"
-					}).showToast();
+					showToggleNotification("diffuse textures", hasDiffuse);
 				}
 			});
 
 			// needs to have its Y unit flipped
 			ktx2Loader.load("glb/lightmap/lightmap.ktx2", tex => {
-				tex.minFilter = THREE.NearestFilter;
-				// tex.encoding = THREE.sRGBEncoding;
+				map = tex;
 
-				tex.needsUpdate = true;
-				
-				for(let material of materials){
+				for (let material of materials) {
 					material.lightMap = tex;
 					material.needsUpdate = true;
 				}
-
-				map = tex;
 
 				// precompile
 				composer.render(0);
@@ -530,6 +507,16 @@
 			});
 
 			scene.add(object);
+		}
+
+		function showToggleNotification(what, enabled) {
+			Toastify({
+				text: (enabled ? "Enabled" : "Disabled") + " " + what,
+				duration: 1000,
+				newWindow: true,
+				gravity: "top",
+				position: "right"
+			}).showToast();
 		}
 
 		function startRendering() {
