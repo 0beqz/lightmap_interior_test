@@ -175,7 +175,7 @@
 			// total size in bytes
 			const total = useUncompressed ? 33_917_504 : 2_240_376;
 
-			// compressed using "gltfpack -i room_demo.glb -o demo.glb -noq -kn -km -tq 10 -ke -tc -mm -tp -vc 1 -vn 1"
+			// compressed using "gltfpack -i room_demo.glb -o demo.glb -noq -kn -km -tq 10 -ke -tc -mm"
 			gltfLoader.load("glb/" + modelName + ".glb", handeModel, xhr => {
 				loadingNode.textContent = "Loading scene... " + Math.round(xhr.loaded / total * 100) + "%";
 			});
